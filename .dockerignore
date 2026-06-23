@@ -1,0 +1,5 @@
+venv
+loan
+__pycache__
+.git
+*.pyc
