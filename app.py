@@ -1,11 +1,15 @@
 import streamlit as st
 import requests
+import os
 
 st.set_page_config(
     page_title="Loan Approval System",
     page_icon="🏦",
     layout="wide"
 )
+
+# API URL — defaults to the deployed Render backend, can be overridden via env var
+API_URL = os.getenv("API_URL", "https://loan-approval-system-9vzn.onrender.com")
 
 st.title("🏦 AI Loan Approval System")
 st.markdown("### Check your loan eligibility instantly")
@@ -153,33 +157,41 @@ if st.button("🔍 Predict Loan Approval", use_container_width=True):
         "Default_Risk": 0.1
     }
 
-    response = requests.post(
-        "http://127.0.0.1:8000/predict",
-        json=payload
-    )
+    try:
+        with st.spinner("Waking up the model server — this can take up to 30-60 seconds on first request..."):
+            response = requests.post(
+                f"{API_URL}/predict",
+                json=payload,
+                timeout=90  # Render free tier can take a while to wake from sleep
+            )
 
-    if response.status_code == 200:
+        if response.status_code == 200:
 
-        result = response.json()
+            result = response.json()
 
-        probability = result["approval_probability"]
+            probability = result["approval_probability"]
 
-        st.divider()
-        st.subheader("📊 Prediction Result")
+            st.divider()
+            st.subheader("📊 Prediction Result")
 
-        if result["prediction"] == 1:
-            st.success("✅ Loan Approved")
-            st.balloons()
+            if result["prediction"] == 1:
+                st.success("✅ Loan Approved")
+                st.balloons()
+            else:
+                st.error("❌ Loan Rejected")
+
+            st.metric(
+                "Approval Probability",
+                f"{probability}%"
+            )
+
+            st.progress(probability / 100)
+
         else:
-            st.error("❌ Loan Rejected")
+            st.error(f"API Error (status {response.status_code})")
+            st.write(response.text)
 
-        st.metric(
-            "Approval Probability",
-            f"{probability}%"
-        )
-
-        st.progress(probability / 100)
-
-    else:
-        st.error("API Error")
-        st.write(response.text)
+    except requests.exceptions.Timeout:
+        st.error("⏱️ The server took too long to respond. The backend may still be waking up — please try again in a moment.")
+    except requests.exceptions.ConnectionError:
+        st.error("🔌 Could not connect to the prediction server. Please check that the backend is running.")
